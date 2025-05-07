@@ -314,3 +314,112 @@ JMM은 자바에서 메모리 접근 및 변경에 대한 규칙을 정의한 �
 - 지역 변수는 공유되지 않기 때문에 동기화 대상이 아님
 
 ---
+
+
+## 섹션 8. 고급 동기화 - `java.util.concurrent.locks`
+
+### LockSupport
+
+#### `synchronized` 단점
+
+* **무한 대기**: `Blocked` 상태의 쓰레드는 락이 풀릴 때까지 계속 대기함
+
+  * 일정 시간만 대기하거나 중간에 인터럽트하는 기능 없음
+* **공정성 부족**: 락이 풀려도 어떤 쓰레드가 락을 획득할지 보장되지 않음
+
+#### LockSupport 기능
+
+LockSupport는 쓰레드를 `waiting` 상태로 전환시킴
+→ 깨워줄 때까지 대기하며 CPU 스케줄링에 포함되지 않음
+
+| 메서드                | 설명                                |
+| ------------------ | --------------------------------- |
+| `park()`           | 쓰레드를 `waiting` 상태로 전환             |
+| `parkNanos(nanos)` | 지정한 나노초 동안 `Timed_waiting` 상태로 전환 |
+| `unpark(Thread)`   | 해당 쓰레드를 `Runnable` 상태로 깨움         |
+
+#### 인터럽트 처리
+
+* `waiting`, `timed_waiting`: 인터럽트 발생 시 `Runnable` 상태로 전환됨
+* `blocked`: 인터럽트가 걸려도 상태에서 빠져나오지 못함
+
+---
+
+### 쓰레드 상태 비교
+
+| 상태              | 설명                                    | 인터럽트 | 예시                                     |
+| --------------- | ------------------------------------- | ---- | -------------------------------------- |
+| `Blocked`       | 락을 얻기 위해 대기 중인 상태 (`synchronized` 내부) | ×    | `synchronized`                         |
+| `Waiting`       | 외부에서 깨워줄 때까지 대기                       | ○    | `Thread.join()`, `Object.wait()`       |
+| `Timed_waiting` | 일정 시간 대기                              | ○    | `Thread.sleep(ms)`, `parkNanos(nanos)` |
+
+※ 세 상태 모두 실행 스케줄링에 들어가지 않아서 CPU 입장에서 보면 비활성 상태임
+※ `Blocked`는 `synchronized`에서만 쓰는 특별한 상태, 나머지는 범용적으로 사용 가능
+
+---
+
+### ReentrantLock - 이론
+
+`synchronized` 단점을 해결하기 위해 `Lock 인터페이스`를 사용함
+대표적인 구현체는 `ReentrantLock`
+
+#### 기본 사용법
+
+```java
+Lock lock = new ReentrantLock();
+lock.lock();
+try {
+    // 임계 영역
+} finally {
+    lock.unlock(); // 락 반납 필수
+}
+```
+
+#### 주요 특징
+
+* `lock()` 호출 시 락을 얻기 전까지 대기 (인터럽트 불가)
+* `synchronized`와 다르게 객체 내부의 모니터 락이 아닌 별도 락 사용
+
+---
+
+### 공정성(Fairness)
+
+| 모드                                | 설명             | 특징                                |
+| --------------------------------- | -------------- | --------------------------------- |
+| 비공정 모드 (`new ReentrantLock()`)    | 락 요청 순서 보장 안 됨 | 성능 우선, 빠르게 락 획득 가능, 기아 현상 발생 가능   |
+| 공정 모드 (`new ReentrantLock(true)`) | 락 요청 순서 보장     | 모든 쓰레드가 언젠가 락 획득 가능, 성능 저하 가능성 있음 |
+
+→ `ReentrantLock`은 선택적으로 공정성 보장 모드를 제공함
+
+---
+
+### ReentrantLock - 활용
+
+* `synchronized(this)` 대신 `lock.lock()` 사용 가능
+* 임계 영역 종료 후 반드시 `lock.unlock()` 해줘야 함 → 안 하면 다른 쓰레드가 락을 못 얻음
+
+#### 예시
+
+```java
+private final Lock lock = new ReentrantLock();
+
+public void criticalSection() {
+    lock.lock();
+    try {
+        // 임계 영역
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+※ 내부 락은 `monitor lock`이 아닌 `Lock 인터페이스`가 제공하는 락임
+
+---
+
+### ReentrantLock - 대기 중단 기능
+
+`synchronized`에서는 불가능했던 "락을 기다리지 않고 빠져나오기"가 가능함
+→ 락을 얻을 수 없으면 기다리지 않고 바로 다음 로직으로 넘어가는 것도 가능
+
+
