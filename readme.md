@@ -498,4 +498,138 @@ public void criticalSection() {
 
 ---
 
+## 섹션 10. 생산자 소비자 문제2
+
+### Lock Condition - 예제4
+
+#### `Condition`
+
+```java
+Condition condition = lock.newCondition();
+```
+
+* `ReentrantLock`을 사용하는 쓰레드가 대기할 수 있는 대기 공간임
+* `lock.newCondition()` 호출 시 쓰레드 대기 공간이 만들어짐
+* `Object.wait()`과 달리 `Condition`은 직접 생성해줘야 함
+  (모든 객체가 내부적으로 기본 제공하는 wait-notify 메커니즘과 차이 있음)
+
+#### 주요 메서드
+
+* `condition.await()`:
+  → `Object.wait()` 과 유사. 현재 쓰레드를 condition 대기 공간에 보관하며, lock도 반납함.
+
+* `condition.signal()`:
+  → `Object.notify()` 와 유사. 대기 중인 쓰레드 하나를 깨워 대기 공간에서 빠져나오게 함.
+
+---
+
+### ✅ 생산자 소비자 대기 공간 분리 - 예제5
+
+#### 쓰레드 대기 공간 분리
+
+* `consumerCond`: 소비자를 위한 대기 공간
+* `producerCond`: 생산자를 위한 대기 공간
+
+→ 각각 따로 만들면 필요한 조건에서만 신호를 보낼 수 있음
+
+---
+
+### ✅ Object.notify() vs Condition.signal()
+
+| 구분       | Object.notify()                          | Condition.signal()           |
+| -------- | ---------------------------------------- | ---------------------------- |
+| 대기 중 쓰레드 | 임의의 하나                                   | FIFO 순서(일반적으로)               |
+| 사용 조건    | synchronized 블록 안에서 모니터 락을 가진 쓰레드만 호출 가능 | ReentrantLock을 가진 쓰레드만 호출 가능 |
+| 구조       | JVM 구현에 따라 다름                            | 내부적으로 Queue 구조 사용            |
+
+---
+
+### ✅ 스레드의 대기 상태 정리
+
+#### synchronized의 대기 상태
+
+1. **락 획득 대기 (Blocked)**
+
+  * `synchronized` 시작 시 락 없으면 대기
+  * 다른 쓰레드가 빠져나올 때까지 대기
+
+2. **wait() 대기 (Waiting)**
+
+  * `wait()` 호출 시 쓰레드 대기 집합에서 대기
+  * `notify()` 호출되면 빠져나옴
+
+#### ReentrantLock의 대기 상태
+
+1. **락 획득 대기**
+
+  * `lock.lock()` 호출 → 락 없으면 대기 큐에서 대기
+  * 다른 쓰레드가 `unlock()` 해야 락 획득 가능
+
+2. **await() 대기**
+
+  * `condition.await()` 호출 시 해당 condition 대기 공간에서 대기
+  * `condition.signal()` 로 깨어남
+
+---
+
+### ✅ synchronized 구조의 핵심 개념 정리
+
+자바 객체는 내부적으로 아래 3가지를 기본으로 가짐
+
+* 모니터 락
+* 락 대기 집합
+* 쓰레드 대기 집합
+
+→ 이걸 쉽게 비유하자면
+
+* **락 대기 집합**: 1차 대기소
+* **쓰레드 대기 집합**: 2차 대기소
+
+즉, `wait()`을 호출하면 2차 대기소로 이동하고 `notify()`에 의해 깨어나도 다시 1차 대기소(Blocked 상태)에서 락을 기다려야 함
+
+---
+
+### ✅ BlockingQueue 개념 정리
+
+`BlockingQueue`는 자바에서 생산자-소비자 문제를 해결하기 위한 특수 큐임
+
+#### 특징
+
+* **데이터 추가 차단**: 큐가 가득 차면 추가 요청한 쓰레드는 대기
+* **데이터 획득 차단**: 큐가 비어있으면 데이터를 얻으려는 쓰레드는 대기
+
+#### 대표 구현체
+
+| 구현체                   | 설명                    |
+| --------------------- | --------------------- |
+| `ArrayBlockingQueue`  | 배열 기반, 고정 크기          |
+| `LinkedBlockingQueue` | 링크 기반, 크기 제한 없이 사용 가능 |
+
+---
+
+### ✅ BlockingQueue의 다양한 기능
+
+| 작업 종류 | 예외 발생       | 즉시 반환      | 대기       | 시간만큼 대기                |
+| ----- | ----------- | ---------- | -------- | ---------------------- |
+| 삽입    | `add(e)`    | `offer(e)` | `put(e)` | `offer(e, time, unit)` |
+| 제거    | `remove()`  | `poll()`   | `take()` | `poll(time, unit)`     |
+| 조회    | `element()` | `peek()`   | ❌        | ❌                      |
+
+---
+
+### ✅ BlockingQueue - 예외 및 즉시 반환 예시
+
+* `offer(data)` → 성공 시 `true`, 가득 차면 `false` 즉시 반환
+
+* `poll()` → 데이터 없으면 `null` 즉시 반환
+
+* `offer(data, 시간)` → 대기 후 성공 시 `true`, 실패 시 `false`
+
+* `poll(시간)` → 대기 후 데이터 없으면 `null` 반환
+
+* `add(data)` → 가득 차 있으면 예외 발생
+
+* `remove()` → 데이터 없으면 예외 발생
+
+---
 
