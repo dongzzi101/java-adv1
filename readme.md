@@ -523,7 +523,7 @@ Condition condition = lock.newCondition();
 
 ---
 
-### ✅ 생산자 소비자 대기 공간 분리 - 예제5
+### 생산자 소비자 대기 공간 분리 - 예제5
 
 #### 쓰레드 대기 공간 분리
 
@@ -534,7 +534,7 @@ Condition condition = lock.newCondition();
 
 ---
 
-### ✅ Object.notify() vs Condition.signal()
+### Object.notify() vs Condition.signal()
 
 | 구분       | Object.notify()                          | Condition.signal()           |
 | -------- | ---------------------------------------- | ---------------------------- |
@@ -544,7 +544,7 @@ Condition condition = lock.newCondition();
 
 ---
 
-### ✅ 스레드의 대기 상태 정리
+### 스레드의 대기 상태 정리
 
 #### synchronized의 대기 상태
 
@@ -572,7 +572,7 @@ Condition condition = lock.newCondition();
 
 ---
 
-### ✅ synchronized 구조의 핵심 개념 정리
+### synchronized 구조의 핵심 개념 정리
 
 자바 객체는 내부적으로 아래 3가지를 기본으로 가짐
 
@@ -589,7 +589,7 @@ Condition condition = lock.newCondition();
 
 ---
 
-### ✅ BlockingQueue 개념 정리
+### BlockingQueue 개념 정리
 
 `BlockingQueue`는 자바에서 생산자-소비자 문제를 해결하기 위한 특수 큐임
 
@@ -607,7 +607,7 @@ Condition condition = lock.newCondition();
 
 ---
 
-### ✅ BlockingQueue의 다양한 기능
+### BlockingQueue의 다양한 기능
 
 | 작업 종류 | 예외 발생       | 즉시 반환      | 대기       | 시간만큼 대기                |
 | ----- | ----------- | ---------- | -------- | ---------------------- |
@@ -617,7 +617,7 @@ Condition condition = lock.newCondition();
 
 ---
 
-### ✅ BlockingQueue - 예외 및 즉시 반환 예시
+### BlockingQueue - 예외 및 즉시 반환 예시
 
 * `offer(data)` → 성공 시 `true`, 가득 차면 `false` 즉시 반환
 
@@ -924,4 +924,127 @@ future.cancel(false);
 * `invokeAll()`, `invokeAny()`는 여러 작업을 한 번에 처리할 수 있게 해줌
 
 ---
+
+## 섹션 14. 스레드 풀과 Executor 프레임워크2
+
+### ExecutorService 우아한 종료 - 소개
+
+ExecutorService 종료 메서드
+
+| 메서드             | 설명                                                         |
+| --------------- | ---------------------------------------------------------- |
+| `shutdown()`    | 새로운 작업은 받지 않고, 이미 제출된 작업만 모두 완료 후 종료함. 논블로킹 메서드임           |
+| `shutdownNow()` | 실행 중인 작업 중단, 대기 중인 작업을 반환하며 즉시 종료. 인터럽트 발생시켜 중단 시도함. 논블로킹임 |
+
+ExecutorService 상태 확인 메서드
+
+| 메서드              | 설명                                                              |
+| ---------------- | --------------------------------------------------------------- |
+| `isShutdown()`   | 서비스가 종료 상태로 진입했는지 확인                                            |
+| `isTerminated()` | 모든 작업이 끝났는지 확인하는 메서드. `shutdown()` 또는 `shutdownNow()` 이후 호출 가능함 |
+
+작업 완료 대기 메서드
+
+| 메서드                                             | 설명                                            |
+| ----------------------------------------------- | --------------------------------------------- |
+| `awaitTermination(long timeout, TimeUnit unit)` | 서비스 종료 후 남은 작업이 완료될 때까지 지정된 시간만큼 대기. 블로킹 메서드임 |
+
+**Java 19+ 지원 메서드: `close()`**
+
+* `shutdown()` 호출하고 하루 기다림 → 완료 안되면 `shutdownNow()` 호출
+* 호출한 쓰레드에 인터럽트 발생하더라도 `shutdownNow()` 호출됨
+
+---
+
+### ExecutorService 우아한 종료 - 구현
+
+서비스 종료는 우아한 종료 방식으로 먼저 시도하고, 일정 시간 동안 종료되지 않으면 강제 종료하는 방식으로 접근함. 무한정 대기하는 건 피해야 함
+
+---
+
+### Executor 스레드 풀 관리 - 코드
+
+`ThreadPoolExecutor` 생성자의 주요 속성
+
+| 속성                          | 설명                  |
+| --------------------------- | ------------------- |
+| `corePoolSize`              | 기본 쓰레드 수            |
+| `maximumPoolSize`           | 최대 쓰레드 수            |
+| `keepAliveTime`, `TimeUnit` | 초과 쓰레드가 생존할 수 있는 시간 |
+| `workQueue`                 | 작업을 보관할 블로킹 큐       |
+
+---
+
+### Executor 스레드 풀 관리 - 분석
+
+1. 작업 요청 → core 수만큼 쓰레드 생성됨
+2. core 초과 → 큐에 작업 대기
+3. 큐 초과 → max 수만큼 임시 쓰레드 생성됨
+4. max 초과 → 요청 거절(예외 발생)
+
+* `prestartAllCoreThreads()` 호출 시 기본 쓰레드를 미리 생성할 수 있음
+
+---
+
+### Executor 전략 - 고정 풀 전략
+
+**Executors 기본 전략 3가지**
+
+| 전략                          | 설명                                                |
+| --------------------------- | ------------------------------------------------- |
+| `newSingleThreadExecutor()` | 단일 쓰레드 전략. 쓰레드 1개, 큐는 무제한. 테스트나 간단한 작업에 사용함       |
+| `newFixedThreadPool(n)`     | n개의 고정 쓰레드. 큐는 무제한. 안정적인 리소스 예측 가능                |
+| `newCachedThreadPool()`     | 초과 쓰레드만 사용. 큐 없이 바로 처리(SynchronousQueue). 빠름, 유연함 |
+
+---
+
+### Executor 전략 - 캐시 풀 전략
+
+**`newCachedThreadPool()`의 특징**
+
+* 기본 쓰레드 없음
+* 작업 큐 없음 (`SynchronousQueue`)
+* 60초 생존 주기의 초과 쓰레드 사용
+* 요청 수에 따라 쓰레드 수가 자동으로 증가/감소함
+* 빠르고 유연한 처리 가능
+
+**SynchronousQueue**
+
+* 저장 공간 없는 큐
+* 생산자가 작업 요청하면 소비자가 바로 받아서 처리함
+* 내부 버퍼 없이 쓰레드 간 직접 전달
+
+---
+
+### Executor 전략 - 사용자 정의 풀 전략
+
+* **일반 상황**: 큐에 작업 1000개 이하 → 기본 쓰레드(100개)만 처리
+* **긴급 상황**: 큐에 1000개 초과 → 기본 쓰레드 + 초과 쓰레드(100개 추가)
+* **거절 상황**: 큐 초과 + 초과 쓰레드 초과 → 작업 거절됨 (예외 발생)
+
+**자주하는 실수 예시**
+
+```java
+new ThreadPoolExecutor(100, 200, 60, TimeUnit.SECONDS, new LinkedBlockingQueue());
+```
+
+* 큐가 무한대(`LinkedBlockingQueue()` 기본 생성자 사용) → 절대 가득 차지 않음
+* 그래서 최대 쓰레드 수까지 확장되지 않음
+* 긴급 상황으로 인식되지 않아 초과 쓰레드 안 생김
+
+---
+
+### Executor 예외 정책
+
+큐도 가득차고 초과 쓰레드도 다 사용한 상황이면 작업을 거절함
+
+**ThreadPoolExecutor의 거절 정책**
+
+| 정책                 | 설명                                          |
+| ------------------ | ------------------------------------------- |
+| `AbortPolicy`      | 예외 발생시킴 (`RejectedExecutionException`)      |
+| `DiscardPolicy`    | 작업을 조용히 버림                                  |
+| `CallerRunsPolicy` | 요청한 쓰레드가 직접 작업 수행                           |
+| 사용자 정의             | `RejectedExecutionHandler`를 통해 커스텀 정책 적용 가능 |
+
 
